@@ -19,7 +19,6 @@ export interface PontoColeta {
   imagemUri: ImageSourcePropType | string;
   telefoneContato: string;
   aceitaEntulho: boolean;
-  // Campos visuais do Figma
   distanciaKm?: string;
   verificado?: boolean;
   materiaisAceitos?: string[];
@@ -38,9 +37,32 @@ export interface Usuario {
   fotoPerfilUri: ImageSourcePropType | string;
 }
 
+export interface CriarUsuarioDTO {
+  nome: string;
+  email: string;
+  senha: string;
+  username?: string;
+}
+
+export interface LoginDTO {
+  email: string;
+  senha: string;
+}
+
+export interface Coordenadas {
+  latitude: number;
+  longitude: number;
+}
+
+export interface LocalPerfilFotos {
+  fotoPerfilUri?: string;
+  ultimaFotoDescarte?: string;
+}
+
 export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
+  Cadastro: undefined;
   MainTabs: undefined;
   Detalhes: { ponto: PontoColeta };
 };

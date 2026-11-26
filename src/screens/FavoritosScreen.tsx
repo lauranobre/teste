@@ -1,69 +1,45 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
-  SafeAreaView,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { EcopontoCard } from '../components/EcopontoCard';
+import { LoadingState } from '../components/LoadingState';
+import { useFavoritos } from '../hooks/useFavoritos';
 import { colors } from '../theme/colors';
+import { commonStyles } from '../theme/styles';
 import { RootStackParamList } from '../types';
-
-type PontoType = RootStackParamList['Detalhes']['ponto'];
-
-const FAVORITOS_KEY = '@reciclaspot:favoritos';
 
 export default function FavoritosScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [favoritos, setFavoritos] = useState<PontoType[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const { favoritos, carregando, recarregarFavoritos } = useFavoritos();
   const [filtroCategoria, setFiltroCategoria] = useState<string | null>(null);
 
-  // Recarrega os favoritos do AsyncStorage toda vez que a aba ganhar foco (funciona 100% offline)
   useFocusEffect(
     useCallback(() => {
-      let ativo = true;
-
-      async function carregarFavoritosOffline() {
-        try {
-          const dadosSalvos = await AsyncStorage.getItem(FAVORITOS_KEY);
-          if (ativo) {
-            if (dadosSalvos) {
-              setFavoritos(JSON.parse(dadosSalvos));
-            } else {
-              setFavoritos([]);
-            }
-          }
-        } catch (error) {
-          console.log('Erro ao ler favoritos offline:', error);
-        } finally {
-          if (ativo) setCarregando(false);
-        }
-      }
-
-      carregarFavoritosOffline();
-
-      return () => {
-        ativo = false;
-      };
-    }, [])
+      recarregarFavoritos();
+    }, [recarregarFavoritos])
   );
 
-  const favoritosFiltrados = filtroCategoria
-    ? favoritos.filter((item) =>
-        item.categoria?.toLowerCase().includes(filtroCategoria.toLowerCase())
-      )
-    : favoritos;
+  const favoritosFiltrados = useMemo(() => {
+    if (!filtroCategoria) return favoritos;
+    return favoritos.filter(
+      (item) =>
+        item.categoria?.toLowerCase().includes(filtroCategoria.toLowerCase()) ||
+        (filtroCategoria === 'E-lixo' && item.categoria === 'Eletrônicos')
+    );
+  }, [favoritos, filtroCategoria]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={commonStyles.safeAreaWhite} edges={['top']}>
       <View style={styles.content}>
         <Text style={styles.title}>Favoritos</Text>
 
@@ -125,12 +101,9 @@ export default function FavoritosScreen() {
         </Text>
 
         {carregando ? (
-          <View style={styles.emptyContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.emptyText}>Carregando favoritos salvos...</Text>
-          </View>
+          <LoadingState mensagem="Carregando favoritos salvos..." />
         ) : favoritosFiltrados.length === 0 ? (
-          <View style={styles.emptyContainer}>
+          <View style={commonStyles.centerContainer}>
             <Ionicons name="star-outline" size={48} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>Nenhum favorito encontrado</Text>
             <Text style={styles.emptyText}>
@@ -144,11 +117,19 @@ export default function FavoritosScreen() {
             data={favoritosFiltrados}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={carregando}
+                onRefresh={recarregarFavoritos}
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+              />
+            }
             renderItem={({ item }) => (
               <EcopontoCard
                 ponto={{
                   ...item,
-                  statusProjeto: item.id === '1' ? 'Projeto finalizado' : undefined,
+                  statusProjeto: item.id === '1' ? 'Projeto finalizado' : item.statusProjeto,
                 }}
                 showStatusBadge={item.id === '1'}
                 onPress={() => navigation.navigate('Detalhes', { ponto: item })}
@@ -162,19 +143,12 @@ export default function FavoritosScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
   content: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   title: { fontSize: 22, fontWeight: '700', color: colors.textDark, marginBottom: 14 },
   filterRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   pill: { paddingHorizontal: 18, paddingVertical: 7, borderRadius: 20 },
   pillText: { fontWeight: '700', fontSize: 13 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.textDark, marginBottom: 12 },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',

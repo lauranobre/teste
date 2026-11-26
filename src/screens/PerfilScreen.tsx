@@ -1,74 +1,70 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { storageService } from '../services/storage';
 import { colors } from '../theme/colors';
-import { Usuario } from '../types';
+import { commonStyles } from '../theme/styles';
+import { RootStackParamList, Usuario } from '../types';
+import { POINTS_PER_DISPOSAL } from '../utils/constants';
+import { resolveImageSource } from '../utils/image';
 
-const STORAGE_PERFIL_KEY = '@reciclaspot:perfil_fotos';
+const USUARIO_PADRAO: Usuario = {
+  id: 'u1',
+  nome: 'Mariana Costa',
+  username: 'Eco-mariana1234',
+  email: 'mariana@email.com',
+  pontosReciclagem: 450,
+  descartesRealizados: 45,
+  kgsReciclados: 12.3,
+  fotoPerfilUri: 'images3.jpg',
+};
 
 export default function PerfilScreen() {
-  const [usuario, setUsuario] = useState<Usuario>({
-    id: 'u1',
-    nome: 'Mariana',
-    username: 'Eco-mariana1234',
-    email: 'mariana@reciclaspot.com',
-    pontosReciclagem: 450,
-    descartesRealizados: 45,
-    kgsReciclados: 12.3,
-    fotoPerfilUri: 'https://unsplash.com',
-  });
-
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [usuario, setUsuario] = useState<Usuario>(USUARIO_PADRAO);
   const [ultimaFotoDescarte, setUltimaFotoDescarte] = useState<string | null>(null);
   const [carregandoCamera, setCarregandoCamera] = useState(false);
 
-  // Carrega as fotos salvas localmente ao abrir a tela
   useEffect(() => {
-    async function carregarFotosSalvas() {
-      try {
-        const dadosSalvos = await AsyncStorage.getItem(STORAGE_PERFIL_KEY);
-        if (dadosSalvos) {
-          const parsed = JSON.parse(dadosSalvos);
-          if (parsed.fotoPerfilUri) {
-            setUsuario((prev) => ({ ...prev, fotoPerfilUri: parsed.fotoPerfilUri }));
-          }
-          if (parsed.ultimaFotoDescarte) {
-            setUltimaFotoDescarte(parsed.ultimaFotoDescarte);
-          }
-        }
-      } catch (error) {
-        console.log('Erro ao carregar fotos locais:', error);
+    async function carregarDadosLocais() {
+      const [usuarioSalvo, fotosSalvas] = await Promise.all([
+        storageService.obterUsuarioLogado(),
+        storageService.obterPerfilFotos(),
+      ]);
+
+      if (usuarioSalvo) {
+        setUsuario((prev) => ({
+          ...prev,
+          ...usuarioSalvo,
+          fotoPerfilUri: fotosSalvas.fotoPerfilUri ?? usuarioSalvo.fotoPerfilUri,
+        }));
+      } else if (fotosSalvas.fotoPerfilUri) {
+        setUsuario((prev) => ({
+          ...prev,
+          fotoPerfilUri: fotosSalvas.fotoPerfilUri ?? prev.fotoPerfilUri,
+        }));
+      }
+
+      if (fotosSalvas.ultimaFotoDescarte) {
+        setUltimaFotoDescarte(fotosSalvas.ultimaFotoDescarte);
       }
     }
-    carregarFotosSalvas();
+
+    carregarDadosLocais();
   }, []);
-
-  async function salvarFotosLocalmente(novaAvatarUri?: string, novaDescarteUri?: string) {
-    try {
-      const dadosAtuais = await AsyncStorage.getItem(STORAGE_PERFIL_KEY);
-      const parsed = dadosAtuais ? JSON.parse(dadosAtuais) : {};
-
-      const atualizado = {
-        fotoPerfilUri: novaAvatarUri ?? parsed.fotoPerfilUri,
-        ultimaFotoDescarte: novaDescarteUri ?? parsed.ultimaFotoDescarte,
-      };
-
-      await AsyncStorage.setItem(STORAGE_PERFIL_KEY, JSON.stringify(atualizado));
-    } catch (error) {
-      console.log('Erro ao salvar foto localmente:', error);
-    }
-  }
 
   async function abrirCamera(modo: 'avatar' | 'descarte') {
     setCarregandoCamera(true);
@@ -86,7 +82,7 @@ export default function PerfilScreen() {
       const resultado = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: [1,1],
+        aspect: [1, 1],
         quality: 0.7,
       });
 
@@ -94,56 +90,67 @@ export default function PerfilScreen() {
         const novaUri = resultado.assets[0].uri;
 
         if (modo === 'avatar') {
-          setUsuario((prev) => ({ ...prev, fotoPerfilUri: novaUri }));
-          await salvarFotosLocalmente(novaUri, undefined);
+          const atualizado = { ...usuario, fotoPerfilUri: novaUri };
+          setUsuario(atualizado);
+          await storageService.salvarPerfilFotos({ fotoPerfilUri: novaUri });
+          await storageService.salvarUsuarioLogado(atualizado);
           Alert.alert('Sucesso', 'Foto de perfil atualizada!');
         } else {
           setUltimaFotoDescarte(novaUri);
-          await salvarFotosLocalmente(undefined, novaUri);
-          setUsuario((prev) => ({
-            ...prev,
-            descartesRealizados: (prev.descartesRealizados ?? 0) + 1,
-            pontosReciclagem: prev.pontosReciclagem + 10,
-          }));
-          Alert.alert('Descarte Registrado!', 'Comprovante salvo e você ganhou +10 pontos.');
+          await storageService.salvarPerfilFotos({ ultimaFotoDescarte: novaUri });
+          const atualizado: Usuario = {
+            ...usuario,
+            descartesRealizados: (usuario.descartesRealizados ?? 0) + 1,
+            pontosReciclagem: usuario.pontosReciclagem + POINTS_PER_DISPOSAL,
+          };
+          setUsuario(atualizado);
+          await storageService.salvarUsuarioLogado(atualizado);
+          Alert.alert(
+            'Descarte Registrado!',
+            `Comprovante salvo e você ganhou +${POINTS_PER_DISPOSAL} pontos.`
+          );
         }
       }
-    } catch (erro) {
+    } catch {
       Alert.alert(
         'Erro ao abrir câmera',
-        'Verifique se o Expo Go tem permissão de câmera no aparelho.'
+        'Verifique se o aparelho concedeu permissão de câmera.'
       );
-      console.log(erro);
     } finally {
       setCarregandoCamera(false);
     }
   }
 
+  async function handleSair() {
+    await storageService.removerUsuarioLogado();
+    navigation.replace('Login');
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={commonStyles.safeAreaWhite} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.topBanner} />
 
         <View style={styles.profileHeader}>
           <TouchableOpacity onPress={() => abrirCamera('avatar')} disabled={carregandoCamera}>
-            <Image source={{ uri: usuario.fotoPerfilUri }} style={styles.avatar} />
+            <Image source={resolveImageSource(usuario.fotoPerfilUri)} style={styles.avatar} />
             <View style={styles.editAvatarBadge}>
               <Ionicons name="camera" size={14} color={colors.white} />
             </View>
           </TouchableOpacity>
           <Text style={styles.name}>{usuario.nome}</Text>
-          <Text style={styles.username}>{usuario.username}</Text>
+          <Text style={styles.username}>{usuario.username ?? usuario.email}</Text>
         </View>
 
         <View style={styles.statsCard}>
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Descartes</Text>
-            <Text style={styles.statValue}>{usuario.descartesRealizados}</Text>
+            <Text style={styles.statValue}>{usuario.descartesRealizados ?? 0}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.statBox}>
             <Text style={styles.statLabel}>Kgs Reciclados</Text>
-            <Text style={styles.statValue}>{usuario.kgsReciclados}</Text>
+            <Text style={styles.statValue}>{usuario.kgsReciclados ?? 0}</Text>
           </View>
         </View>
 
@@ -176,7 +183,19 @@ export default function PerfilScreen() {
           >
             <View style={styles.menuLeft}>
               <Ionicons name="logo-usd" size={22} color={colors.textDark} />
-              <Text style={styles.menuText}>Pontos Acumulados ({usuario.pontosReciclagem})</Text>
+              <Text style={styles.menuText}>
+                Pontos Acumulados ({usuario.pontosReciclagem})
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={handleSair}>
+            <View style={styles.menuLeft}>
+              <Ionicons name="log-out-outline" size={22} color={colors.badgeNaoReciclado} />
+              <Text style={[styles.menuText, { color: colors.badgeNaoReciclado }]}>
+                Sair da conta
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </TouchableOpacity>
@@ -191,7 +210,7 @@ export default function PerfilScreen() {
 
         <View style={styles.cameraWrapper}>
           <TouchableOpacity
-            style={styles.cameraButton}
+            style={[commonStyles.primaryButton, styles.cameraButton]}
             onPress={() => abrirCamera('descarte')}
             disabled={carregandoCamera}
           >
@@ -200,7 +219,7 @@ export default function PerfilScreen() {
             ) : (
               <>
                 <Ionicons name="camera-outline" size={24} color={colors.white} />
-                <Text style={styles.cameraButtonText}>Fotografar Descarte</Text>
+                <Text style={commonStyles.primaryButtonText}>Fotografar Descarte</Text>
               </>
             )}
           </TouchableOpacity>
@@ -211,7 +230,6 @@ export default function PerfilScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.white },
   scrollContent: { paddingBottom: 30 },
   topBanner: { height: 110, backgroundColor: colors.primary },
   profileHeader: { alignItems: 'center', marginTop: -50 },
@@ -283,15 +301,6 @@ const styles = StyleSheet.create({
   },
   cameraWrapper: { marginTop: 24, paddingHorizontal: 28, alignItems: 'center' },
   cameraButton: {
-    flexDirection: 'row',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    height: 48,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
     width: '100%',
   },
-  cameraButtonText: { color: colors.white, fontSize: 15, fontWeight: '600' },
 });

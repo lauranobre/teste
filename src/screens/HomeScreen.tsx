@@ -1,54 +1,72 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FlatList,
-  SafeAreaView,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { EcopontoCard } from '../components/EcopontoCard';
-import { MOCK_PONTOS } from '../services/mockPontos';
+import { ErrorState } from '../components/ErrorState';
+import { LoadingState } from '../components/LoadingState';
+import { useEcopontos } from '../hooks/useEcopontos';
+import { useLocation } from '../hooks/useLocation';
 import { colors } from '../theme/colors';
+import { commonStyles } from '../theme/styles';
 import { CategoriaResiduo, RootStackParamList } from '../types';
-
-const FILTROS: { label: string; valor: CategoriaResiduo; cor: string }[] = [
-  { label: 'E-lixo', valor: 'Eletrônicos', cor: colors.primary },
-  { label: 'Óleo', valor: 'Óleo Usado', cor: colors.badgeOleo },
-  { label: 'Papel', valor: 'Recicláveis Gerais', cor: colors.badgePapel },
-  { label: 'Pilhas', valor: 'Pilhas/Baterias', cor: colors.badgeVidro },
-];
+import { FILTROS_MATERIAIS } from '../utils/constants';
 
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [busca, setBusca] = useState('');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<CategoriaResiduo | null>(null);
 
-  const pontosFiltrados = MOCK_PONTOS.filter((item) => {
-    const termo = busca.toLowerCase().trim();
-    const matchBusca =
-      item.nome.toLowerCase().includes(termo) ||
-      item.bairro.toLowerCase().includes(termo) ||
-      item.endereco.toLowerCase().includes(termo);
+  const { coords } = useLocation(true);
 
-    const matchCategoria = categoriaSelecionada
-      ? item.categoria === categoriaSelecionada
-      : true;
+  const materialQuery = useMemo(() => {
+    if (!categoriaSelecionada) return undefined;
+    return FILTROS_MATERIAIS.find((item) => item.valor === categoriaSelecionada)?.queryMaterial;
+  }, [categoriaSelecionada]);
 
-    return matchBusca && matchCategoria;
+  const {
+    ecopontos,
+    loading,
+    refreshing,
+    error,
+    offlineCacheDisponivel,
+    recarregar,
+    pullToRefresh,
+    carregarCacheOffline,
+  } = useEcopontos({
+    material: materialQuery,
+    userCoords: coords,
   });
 
+  const pontosFiltrados = useMemo(() => {
+    const termo = busca.toLowerCase().trim();
+    if (!termo) return ecopontos;
+
+    return ecopontos.filter(
+      (item) =>
+        item.nome.toLowerCase().includes(termo) ||
+        item.bairro.toLowerCase().includes(termo) ||
+        item.endereco.toLowerCase().includes(termo)
+    );
+  }, [ecopontos, busca]);
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={commonStyles.safeAreaPrimary} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>ReciclaSpot</Text>
-        <View style={styles.searchBox}>
+        <View style={commonStyles.searchBox}>
           <TextInput
-            style={styles.searchInput}
+            style={commonStyles.searchInput}
             placeholder="Buscar coletas por nome ou bairro"
             placeholderTextColor={colors.textMuted}
             value={busca}
@@ -66,7 +84,7 @@ export default function HomeScreen() {
 
       <View style={styles.content}>
         <View style={styles.filterRow}>
-          {FILTROS.map((filtro) => {
+          {FILTROS_MATERIAIS.map((filtro) => {
             const ativo = categoriaSelecionada === filtro.valor;
             return (
               <TouchableOpacity
@@ -80,9 +98,7 @@ export default function HomeScreen() {
                     borderColor: colors.darkBg,
                   },
                 ]}
-                onPress={() =>
-                  setCategoriaSelecionada(ativo ? null : filtro.valor)
-                }
+                onPress={() => setCategoriaSelecionada(ativo ? null : filtro.valor)}
               >
                 <Text style={styles.filterText}>{filtro.label}</Text>
               </TouchableOpacity>
@@ -90,47 +106,87 @@ export default function HomeScreen() {
           })}
         </View>
 
-        <FlatList
-          data={pontosFiltrados}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 24 }}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>Nenhum ecoponto encontrado para este filtro.</Text>
-          }
-          renderItem={({ item }) => (
-            <EcopontoCard
-              ponto={item}
-              onPress={() => navigation.navigate('Detalhes', { ponto: item })}
-            />
-          )}
-        />
+        {loading && !refreshing ? (
+          <LoadingState mensagem="Carregando ecopontos..." />
+        ) : error ? (
+          <ErrorState
+            mensagem={error}
+            onRetry={recarregar}
+            onOfflineFallback={offlineCacheDisponivel ? carregarCacheOffline : undefined}
+          />
+        ) : (
+          <FlatList
+            data={pontosFiltrados}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={pullToRefresh}
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+              />
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>Nenhum ecoponto encontrado para este filtro.</Text>
+            }
+            renderItem={({ item }) => (
+              <EcopontoCard
+                ponto={item}
+                onPress={() => navigation.navigate('Detalhes', { ponto: item })}
+              />
+            )}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.primary },
   header: {
     backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 20,
   },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: colors.white, marginBottom: 12 },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    height: 44,
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.white,
+    marginBottom: 12,
   },
-  searchInput: { flex: 1, fontSize: 15, color: colors.textDark },
-  content: { flex: 1, backgroundColor: colors.white, paddingHorizontal: 18, paddingTop: 16 },
-  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
-  filterPill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
-  filterText: { color: colors.white, fontWeight: '700', fontSize: 13 },
-  emptyText: { textAlign: 'center', color: colors.textMuted, marginTop: 40, fontSize: 15 },
+  content: {
+    flex: 1,
+    backgroundColor: colors.white,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  filterText: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  listContent: {
+    paddingBottom: 24,
+    flexGrow: 1,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: colors.textMuted,
+    marginTop: 40,
+    fontSize: 15,
+  },
 });

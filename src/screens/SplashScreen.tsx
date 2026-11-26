@@ -2,17 +2,27 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { storageService } from '../services/storage';
 import { colors } from '../theme/colors';
 import { RootStackParamList } from '../types';
+import { SPLASH_DELAY_MS } from '../utils/constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Splash'>;
 
 export default function SplashScreen({ navigation }: Props) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigation.replace('Login');
-    }, 2000);
-    return () => clearTimeout(timer);
+    let ativo = true;
+
+    const timer = setTimeout(async () => {
+      const usuarioLogado = await storageService.obterUsuarioLogado();
+      if (!ativo) return;
+      navigation.replace(usuarioLogado ? 'MainTabs' : 'Login');
+    }, SPLASH_DELAY_MS);
+
+    return () => {
+      ativo = false;
+      clearTimeout(timer);
+    };
   }, [navigation]);
 
   return (

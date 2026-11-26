@@ -8,10 +8,11 @@
     "userInterfaceStyle": "automatic",
     "ios": {},
     "android": {
+      "package": "com.reciclaspot.app",
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server"
+      "bundler": "metro"
     },
     "plugins": [
       "expo-router",
@@ -26,7 +27,11 @@
         {
           "cameraPermission": "O ReciclaSpot precisa acessar a câmera para registrar a foto comprovante do descarte consciente e atualizar seu perfil."
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-splash-screen",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

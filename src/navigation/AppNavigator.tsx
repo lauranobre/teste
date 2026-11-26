@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 
+import CadastroScreen from '../screens/CadastroScreen';
 import DetalhesScreen from '../screens/DetalhesScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SplashScreen from '../screens/SplashScreen';
@@ -13,6 +14,7 @@ export function AppNavigator() {
     <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Cadastro" component={CadastroScreen} />
       <Stack.Screen name="MainTabs" component={TabNavigator} />
       <Stack.Screen name="Detalhes" component={DetalhesScreen} />
     </Stack.Navigator>

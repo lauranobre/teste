@@ -1,56 +1,100 @@
-# Welcome to your Expo app 👋
+# ReciclaSpot 🌱♻️
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicativo mobile em **React Native + Expo** desenvolvido para conectar cidadãos aos pontos de coleta seletiva (ecopontos) da cidade, com integração à API RESTful, persistência local em **SQLite (`expo-sqlite`)** e **AsyncStorage**, geolocalização em mapa e captura de comprovantes de descarte.
 
-## Get started
+---
 
-1. Install dependencies
+## ✨ Funcionalidades
 
-   ```bash
-   npm install
-   ```
+- **Autenticação & Cadastro de Cidadãos (`POST /usuarios`, `POST /auth/login`):** Criação de conta com validação de formulário e sessão persistida localmente.
+- **Catálogo Dinâmico de Ecopontos (`GET /ecopontos`):** Listagem filtrável por material (`?material=eletronico`, óleo, papel, pilhas) e busca textual por nome, bairro ou endereço.
+- **Resiliência de Rede:**
+  - *Pull-to-Refresh* (`RefreshControl`) na listagem principal e nos favoritos.
+  - Limite de tempo de espera (*Timeout* de 8s) via Axios + `AbortController`.
+  - Estado visual de erro amigável com botão **"Tentar Novamente"** e opção de leitura do cache offline em SQLite.
+- **Mapa Geolocalizado (`expo-location` + `react-native-maps`):** Localização atual do usuário, cálculo automático de distância em quilômetros e marcadores interativos.
+- **Detalhes & Rotas (`GET /ecopontos/:id`):** Atualização dos dados do ecoponto, horários formatados, materiais aceitos, regras de descarte e abertura de rota no aplicativo de mapas.
+- **Favoritos Offline (`expo-sqlite` + `AsyncStorage`):** Persistência relacional local com SQLite (`openDatabaseAsync`, `execAsync`, `runAsync`, `getAllAsync`, `getFirstAsync`) e fallback em `AsyncStorage`.
+- **Perfil & Registro de Descarte (`expo-image-picker`):** Atualização de foto de perfil e registro fotográfico de comprovante de descarte com pontuação.
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## 🧱 Arquitetura em Camadas
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+ReciclaSpot/
+├── backend/                  # Servidor REST local + Banco SQLite (Node.js)
+│   ├── database.js           # Schema SQLite (ecopontos e usuarios) + seed inicial
+│   ├── server.js             # API HTTP REST (GET /ecopontos, GET /ecopontos/:id, POST /usuarios)
+│   └── reciclaspot.db        # Arquivo SQLite gerado automaticamente ao iniciar a API
+├── src/
+│   ├── components/           # EcopontoCard, ErrorState, LoadingState
+│   ├── hooks/                # useEcopontos, useLocation, useFavoritos
+│   ├── navigation/           # AppNavigator, TabNavigator
+│   ├── screens/              # Splash, Login, Cadastro, Home, Mapa, Detalhes, Favoritos, Perfil
+│   ├── services/             # api.ts (Axios), localDatabase.ts (expo-sqlite), storage.ts (AsyncStorage)
+│   ├── theme/                # colors.ts e styles.ts (estilos compartilhados DRY)
+│   ├── types/                # Interfaces TypeScript e tipos de navegação
+│   └── utils/                # distance.ts, schedule.ts, validation.ts, image.ts, constants.ts
+├── docs/figma/               # Protótipos de tela e Design System
+├── eas.json                  # Perfis de build EAS (incluindo preview APK)
+└── App.tsx
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+---
 
-### Other setup steps
+## 🚀 Como Executar no VS Code
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 1. Instalar dependências
+```bash
+npm install
+```
 
-## Learn more
+### 2. Iniciar o Banco de Dados + API REST local
+Em um terminal do VS Code, execute:
+```bash
+npm run api
+```
+O servidor será iniciado em `http://0.0.0.0:3000` e criará automaticamente o banco SQLite em `backend/reciclaspot.db` com os ecopontos e usuários iniciais:
+- **Usuário demo:** `ana@email.com` | **Senha:** `123456`
+- **Endpoints disponíveis:**
+  - `GET /health`
+  - `GET /ecopontos` (opcional: `?material=eletronico&busca=centro`)
+  - `GET /ecopontos/:id`
+  - `POST /usuarios`
+  - `POST /auth/login`
 
-To learn more about developing your project with Expo, look at the following resources:
+> **Observação de rede no dispositivo físico:** O app detecta automaticamente o IP do host do Expo (`Constants.expoConfig.hostUri`). Caso utilize outra URL/porta, defina `EXPO_PUBLIC_API_URL=http://SEU_IP:3000`.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 3. Iniciar o Aplicativo Expo
+Em outro terminal do VS Code:
+```bash
+npx expo start
+```
 
-## Join the community
+---
 
-Join our community of developers creating universal apps.
+## 🧪 Testes, Tipagem e Lint
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm test          # Executa os testes unitários com Jest
+npm run typecheck # Verifica tipagem estrita TypeScript (tsc --noEmit)
+npm run lint      # Executa análise estática ESLint
+```
+
+---
+
+## 📦 Build Android (APK) via EAS
+
+Certifique-se de estar autenticado na conta Expo (`npx eas-cli@latest login`) e execute:
+
+```bash
+npx eas-cli@latest build -p android --profile preview
+```
+
+---
+
+## 🖼️ Telas do Protótipo (Figma)
+
+- [Capa](docs/figma/capa.png) | [Login](docs/figma/login.png) | [Home](docs/figma/home.png)
+- [Mapa](docs/figma/mapa.png) | [Detalhes](docs/figma/detalhes.png) | [Favoritos](docs/figma/favoritos.png) | [Perfil](docs/figma/perfil.png)

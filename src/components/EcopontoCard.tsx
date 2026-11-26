@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { colors } from '../theme/colors';
+import { commonStyles } from '../theme/styles';
 import { PontoColeta } from '../types';
+import { resolveImageSource } from '../utils/image';
 
 interface Props {
   ponto: PontoColeta;
@@ -11,15 +13,12 @@ interface Props {
 
 export function EcopontoCard({ ponto, onPress, showStatusBadge }: Props) {
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.85} onPress={onPress}>
-      <Image
-        source={
-          typeof ponto.imagemUri === 'string'
-            ? { uri: ponto.imagemUri }
-            : ponto.imagemUri
-        }
-        style={styles.image}
-      />
+    <TouchableOpacity
+      style={[styles.card, commonStyles.cardShadow]}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
+      <Image source={resolveImageSource(ponto.imagemUri)} style={styles.image} />
 
       <View style={styles.infoContainer}>
         <View style={styles.headerRow}>
@@ -44,9 +43,9 @@ export function EcopontoCard({ ponto, onPress, showStatusBadge }: Props) {
             </View>
           ) : (
             <View style={styles.rightMeta}>
-              {ponto.distanciaKm && (
+              {ponto.distanciaKm ? (
                 <Text style={styles.distance}>{ponto.distanciaKm}</Text>
-              )}
+              ) : null}
               <Text style={styles.link}>Ver endereço</Text>
             </View>
           )}
@@ -65,11 +64,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 10,
     marginBottom: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
   },
   image: {
     width: 92,

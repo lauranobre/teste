@@ -1,36 +1,75 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { MOCK_USUARIOS } from '../services/mockUsuarios';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { ApiClientError, apiService } from '../services/api';
+import { storageService } from '../services/storage';
 import { colors } from '../theme/colors';
+import { commonStyles } from '../theme/styles';
 import { RootStackParamList } from '../types';
+import { validarFormularioLogin } from '../utils/validation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
+  const [carregando, setCarregando] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  function handleLogin() {
-    if (!email.trim() || !senha.trim()) {
-      Alert.alert('Atenção', 'Preencha o e-mail e a senha.');
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  async function handleLogin() {
+    const validacao = validarFormularioLogin(email, senha);
+    if (!validacao.valido) {
+      Alert.alert('Atenção', validacao.erro);
       return;
     }
 
-    const usuarioEncontrado = MOCK_USUARIOS.find(
-      (user) => user.email.toLowerCase() === email.trim().toLowerCase()
-    );
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    if (usuarioEncontrado && senha === '123456') {
+    setCarregando(true);
+    try {
+      const usuario = await apiService.loginUsuario(
+        { email: email.trim().toLowerCase(), senha },
+        controller.signal
+      );
+
+      await storageService.salvarUsuarioLogado(usuario);
       navigation.replace('MainTabs');
-    } else {
-      Alert.alert('Erro', 'E-mail ou senha inválidos.');
+    } catch (error) {
+      if (error instanceof ApiClientError && error.isCanceled) {
+        return;
+      }
+      const mensagem =
+        error instanceof Error ? error.message : 'Não foi possível realizar o login.';
+      Alert.alert('Erro ao entrar', mensagem);
+    } finally {
+      setCarregando(false);
     }
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View style={styles.header}>
         <MaterialCommunityIcons name="map-marker-radius" size={90} color={colors.primary} />
         <Text style={styles.logoText}>
@@ -40,40 +79,63 @@ export default function LoginScreen({ navigation }: Props) {
 
       <View style={styles.form}>
         <TextInput
-          style={styles.input}
+          style={commonStyles.inputField}
           placeholder="E-mail"
           placeholderTextColor={colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
+          autoCorrect={false}
           value={email}
           onChangeText={setEmail}
+          editable={!carregando}
         />
 
         <TextInput
-          style={styles.input}
+          style={commonStyles.inputField}
           placeholder="Senha"
           placeholderTextColor={colors.textMuted}
           secureTextEntry
           value={senha}
           onChangeText={setSenha}
+          editable={!carregando}
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[
+            commonStyles.primaryButton,
+            styles.loginButton,
+            carregando && commonStyles.primaryButtonDisabled,
+          ]}
           onPress={handleLogin}
+          disabled={carregando}
         >
-          <Text style={styles.buttonText}>Entrar</Text>
+          {carregando ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Text style={commonStyles.primaryButtonText}>Entrar</Text>
+          )}
         </TouchableOpacity>
 
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={() =>
+            Alert.alert(
+              'Recuperação de senha',
+              'Entre em contato com a central do ReciclaSpot ou crie uma nova conta em "Cadastre-se".'
+            )
+          }
+        >
           <Text style={styles.forgotText}>Esqueci a senha</Text>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.registerContainer}>
-        <Text style={styles.registerText}>Cadastra-se</Text>
+      <TouchableOpacity
+        style={styles.registerContainer}
+        onPress={() => navigation.navigate('Cadastro')}
+        disabled={carregando}
+      >
+        <Text style={styles.registerText}>Cadastre-se</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -101,27 +163,8 @@ const styles = StyleSheet.create({
   form: {
     width: '100%',
   },
-  input: {
-    backgroundColor: colors.inputBg,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    height: 48,
-    fontSize: 15,
-    marginBottom: 16,
-    color: colors.textDark,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
+  loginButton: {
     marginTop: 4,
-  },
-  buttonText: {
-    color: colors.white,
-    fontSize: 17,
-    fontWeight: '700',
   },
   forgotText: {
     color: colors.textDark,
